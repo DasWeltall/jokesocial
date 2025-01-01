@@ -1,1 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face Detection</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background-color: #ffd700;
+            font-family: 'Arial', sans-serif;
+            overflow: hidden;
+        }
+
+        nav {
+            width: 50%;
+            margin: 10px auto;
+            background-color: transparent;
+            color: black;
+            padding: 10px 0;
+            font-weight: bold;
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+        }
+
+        nav a {
+            color: black;
+            text-decoration: none;
+            font-size: 18px;
+        }
+
+        nav a:hover {
+            text-decoration: underline;
+        }
+
+        #container {
+            position: relative;
+            width: 70vmin;
+            height: 70vmin;
+            margin: auto;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: rgba(34, 144, 233, 1) 0px 22px 70px 4px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        video, canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 20px;
+            object-fit: cover;
+        }
+
+        #happyTimer {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 24px;
+            color: black;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-family: 'Comic Sans MS', cursive, sans-serif;
+        }
+
+        
+    </style>
+</head>
+
+<body>
+    <nav>
+        <a href="#">Home</a>
+        <a href="#" onclick="alert('Statistiken bald verfügbar!')">Statistiken</a>
+        <a href="#" onclick="alert('Witze bald verfügbar!')">Witze</a>
+    </nav>
+    <div id="container">
+        <video id="video" autoplay muted playsinline></video>
+        <div id="happyTimer">Happy Zeit: 0 Sekunden</div>
+    </div>
+    <a href="https://www.flaticon.com/free-icons/joke" title="joke icons">Joke icons created by Kalashnyk - Flaticon</a>
+    <script src="face-api.min.js"></script>
+    <script>
+        let happySeconds = parseInt(localStorage.getItem('happySeconds')) || 0;
+        let isHappy = false;
+        let timer;
+
+        async function init() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                const video = document.getElementById('video');
+                video.srcObject = stream;
+
+                video.onloadedmetadata = () => {
+                    video.play();
+                    loadModels();
+                };
+            } catch (err) {
+                console.error('Kamera-Zugriff fehlgeschlagen:', err);
+                alert('Bitte Kamerazugriff erlauben oder Kamera überprüfen!');
+            }
+        }
+
+        async function loadModels() {
+            await faceapi.nets.tinyFaceDetector.loadFromUri('/models');
+            await faceapi.nets.faceLandmark68Net.loadFromUri('/models');
+            await faceapi.nets.faceRecognitionNet.loadFromUri('/models');
+            await faceapi.nets.faceExpressionNet.loadFromUri('/models');
+            startFaceDetection();
+        }
+
+        function startFaceDetection() {
+            const video = document.getElementById('video');
+            const canvas = faceapi.createCanvasFromMedia(video);
+            document.getElementById('container').append(canvas);
+            const displaySize = { width: video.videoWidth, height: video.videoHeight };
+            faceapi.matchDimensions(canvas, displaySize);
+
+            setInterval(async () => {
+                const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
+                    .withFaceLandmarks()
+                    .withFaceExpressions();
+                const resizedDetections = faceapi.resizeResults(detections, displaySize);
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                faceapi.draw.drawDetections(canvas, resizedDetections);
+                faceapi.draw.drawFaceLandmarks(canvas, resizedDetections);
+                faceapi.draw.drawFaceExpressions(canvas, resizedDetections);
+
+                const happyDetected = detections.some(detection => detection.expressions.happy > 0.8);
+                if (happyDetected && !isHappy) {
+                    isHappy = true;
+                    startHappyTimer();
+                } else if (!happyDetected && isHappy) {
+                    isHappy = false;
+                    stopHappyTimer();
+                }
+            }, 100);
+        }
+
+        function startHappyTimer() {
+            timer = setInterval(() => {
+                happySeconds++;
+                document.getElementById('happyTimer').innerText = `Happy Zeit: ${happySeconds} Sekunden`;
+                localStorage.setItem('happySeconds', happySeconds);
+            }, 1000);
+        }
+
+        function stopHappyTimer() {
+            clearInterval(timer);
+        }
+
+        window.addEventListener('load', init);
+    </script>
+</body>
+
+</html>
 
